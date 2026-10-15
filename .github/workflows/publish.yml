@@ -1,0 +1,54 @@
+name: Publish to PyPI
+
+# Declenche par la publication d'une GitHub Release (tag vX.Y.Z).
+# Trusted Publishing PyPI : aucun token stocke dans les secrets du depot.
+#   Workflow name: publish.yml
+#   Environment  : pypi
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Verifier que le tag correspond a la version du paquet
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(grep -m1 '^__version__' src/forge_core/__init__.py | sed -E 's/__version__ = "(.*)"/\1/')"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Le tag ($GITHUB_REF_NAME) ne correspond pas a la version du paquet ($PKG_VERSION)."
+            exit 1
+          fi
+
+      - run: uv build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/django-forge-core/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
