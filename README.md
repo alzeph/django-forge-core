@@ -1,44 +1,48 @@
 # django-forge-core
 
-Socle runtime des projets [Django Forge](https://github.com/alzeph/django-forge-cli) : de petites briques que le code généré importe, utilisables aussi seules dans n'importe quel projet Django.
+English | [Français](README.fr.md)
 
-Il apporte trois choses :
+Runtime foundation for [Django Forge](https://github.com/alzeph/django-forge-cli) projects: small building blocks that generated code imports, also usable on their own in any Django project.
 
-- une configuration `settings.py` lue dans l'environnement, avec des erreurs claires ;
-- des modèles abstraits courants (horodatage, UUID, suppression logique) ;
-- des erreurs métier typées, à utiliser avec [pycatch](https://github.com/alzeph/pycatch) (`Result`), et leur conversion en réponses DRF.
+It provides three things:
+
+- `settings.py` configuration read from the environment, with clear errors;
+- common abstract models (timestamps, UUID, soft delete);
+- typed business errors meant to be used with [pycatch](https://github.com/alzeph/pycatch) (`Result`), and their conversion into DRF responses.
 
 ## Installation
 
 ```bash
 uv add django-forge-core
-uv add "django-forge-core[drf]"   # avec l'intégration Django REST Framework
+uv add "django-forge-core[drf]"   # with the Django REST Framework integration
 ```
 
-Python 3.12 ou plus, Django 5.0 ou plus.
+Python 3.12 or later, Django 5.0 or later. Projects created with `forge init` get it through the Forge CLI.
 
-## Configuration par l'environnement
+## Configuration from the environment
 
 ```python
 # settings.py
 from forge_core.conf import env, env_bool, env_list, env_int, deep_merge, current_environment
 
-SECRET_KEY = env("SECRET_KEY")                       # ImproperlyConfigured si absente
+SECRET_KEY = env("SECRET_KEY")                       # ImproperlyConfigured if missing
 DEBUG = env_bool("DEBUG", default=False)
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", default=["localhost"])
 DB_PORT = env_int("DB_PORT", default=5432)
 ```
 
-| Fonction | Rôle |
+| Function | Purpose |
 |---|---|
-| `env(name, default, cast)` | Valeur convertie avec `cast` ; `default` est rendu tel quel si la variable est absente |
-| `env_bool` | `1/true/yes/on/oui` ou `0/false/no/off/non` |
-| `env_int`, `env_float` | Nombres |
-| `env_list(name, sep=",")` | Liste de chaînes, sans espaces ni éléments vides |
-| `current_environment()` | Valeur de `FORGE_ENV` (`dev` par défaut) |
-| `deep_merge(*layers)` | Fusionne des couches de configuration, les dictionnaires imbriqués récursivement |
+| `env(name, default, cast)` | Value converted with `cast`; `default` is returned as is when the variable is missing |
+| `env_bool` | `1/true/yes/on/oui` or `0/false/no/off/non` (case insensitive) |
+| `env_int`, `env_float` | Numbers |
+| `env_list(name, sep=",")` | List of strings, without spaces or empty items |
+| `current_environment()` | Value of `FORGE_ENV` (`dev` by default) |
+| `deep_merge(*layers)` | Merges configuration layers, nested dictionaries recursively |
 
-Exemple de couches :
+A missing variable without a default raises `ImproperlyConfigured` naming the variable, and an invalid value reports both the name and the raw value.
+
+Layers example:
 
 ```python
 BASE = {"LOGGING": {"version": 1, "root": {"level": "INFO"}}}
@@ -48,7 +52,7 @@ layers = {"dev": BASE, "prod": deep_merge(BASE, PROD)}
 globals().update(layers[current_environment()])
 ```
 
-## Modèles abstraits
+## Abstract models
 
 ```python
 from django.db import models
@@ -59,13 +63,13 @@ class Article(UUIDModel, TimeStampedModel, SoftDeleteModel):
     title = models.CharField(max_length=200)
 ```
 
-- `TimeStampedModel` : `created_at`, `updated_at`.
-- `UUIDModel` : clé primaire UUID4.
-- `SoftDeleteModel` : `delete()` renseigne `deleted_at`. `Article.objects` ne voit que les lignes actives, `Article.all_objects` voit tout. Méthodes `restore()` et `hard_delete()`, et sur les QuerySets `alive()`, `dead()`, `hard_delete()`.
+- `TimeStampedModel`: `created_at`, `updated_at`.
+- `UUIDModel`: UUID4 primary key.
+- `SoftDeleteModel`: `delete()` sets `deleted_at`. `Article.objects` only sees active rows, `Article.all_objects` sees everything. Methods `restore()` and `hard_delete()`, and on QuerySets `alive()`, `dead()`, `hard_delete()`.
 
-Ces classes sont abstraites : pas de migration propre, et `forge_core` n'a pas besoin d'être dans `INSTALLED_APPS`.
+These classes are abstract: no migration of their own, and `forge_core` does not need to be in `INSTALLED_APPS`.
 
-## Erreurs typées et pycatch
+## Typed errors and pycatch
 
 ```python
 from pycatch import Err, Ok, Result
@@ -76,10 +80,10 @@ def get_article(pk: int) -> Result[Article, NotFound]:
     try:
         return Ok(Article.objects.get(pk=pk))
     except Article.DoesNotExist:
-        return Err(NotFound(f"Article {pk} introuvable"))
+        return Err(NotFound(f"Article {pk} not found"))
 ```
 
-Erreurs fournies : `ValidationFailed` (400), `Unauthenticated` (401), `PermissionRefused` (403), `NotFound` (404), `Conflict` (409). Chacune porte un `code` stable et un `status` HTTP ; `ForgeError` sert de base pour les vôtres.
+Provided errors: `ValidationFailed` (400), `Unauthenticated` (401), `PermissionRefused` (403), `NotFound` (404), `Conflict` (409). Each carries a stable `code` and an HTTP `status`; `ForgeError` is the base class for your own.
 
 ## Django REST Framework
 
@@ -92,13 +96,13 @@ class ArticleView(APIView):
         return respond(get_article(pk))
 ```
 
-`respond` transforme `Ok(valeur)` en réponse et `Err(ForgeError)` en `{"code": ..., "detail": ...}` avec le bon statut. Pour qu'une `ForgeError` levée dans une vue produise la même réponse :
+`respond` turns `Ok(value)` into a response and `Err(ForgeError)` into `{"code": ..., "detail": ...}` with the right status. So that a `ForgeError` raised inside a view produces the same response:
 
 ```python
 REST_FRAMEWORK = {"EXCEPTION_HANDLER": "forge_core.drf.exception_handler"}
 ```
 
-## Développement
+## Development
 
 ```bash
 uv sync
@@ -106,6 +110,6 @@ uv run ruff check src tests
 uv run pytest --cov=forge_core --cov-report=term-missing
 ```
 
-## Licence
+## License
 
 [MIT](LICENSE)
